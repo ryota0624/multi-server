@@ -5,7 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
 	"sync/atomic"
+	"syscall"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -31,21 +36,30 @@ func (s *ShutdownStatus) IsShutdownInitiated() bool {
 }
 
 type Servers struct {
-	servers        []*managedServer
-	shutdownStatus *ShutdownStatus
+	servers         []*managedServer
+	shutdownStatus  *ShutdownStatus
+	shutdownTimeout time.Duration
+	shutdownCtx     context.Context
 }
 
 func NewServers() *Servers {
 	return &Servers{
-		servers:        []*managedServer{},
-		shutdownStatus: &ShutdownStatus{},
+		servers:         []*managedServer{},
+		shutdownStatus:  &ShutdownStatus{},
+		shutdownTimeout: 0,
 	}
+}
+
+func (servers *Servers) ShutdownTimout(t time.Duration) *Servers {
+	servers.shutdownTimeout = t
+	return servers
 }
 
 func (servers *Servers) Resister(server Server) *Servers {
 	servers.servers = append(servers.servers, &managedServer{
 		inner:            server,
 		occurredStartErr: nil,
+		shutdownStatus:   &ShutdownStatus{},
 	})
 
 	return servers
@@ -72,15 +86,26 @@ func (servers *Servers) Start(ctx context.Context) error {
 	return nil
 }
 
+func (servers *Servers) WaitShutdown() {
+	if servers.shutdownCtx == nil {
+		return
+	}
+
+	<-servers.shutdownCtx.Done()
+	return
+}
+
 var (
 	ErrShutdownAlreadyInitiated = errors.New("already initiated")
 )
 
-func (servers *Servers) GracefullyShutdown(ctx context.Context) error {
+func (servers *Servers) GracefullyShutdown() error {
 	if servers.shutdownStatus.IsShutdownInitiated() {
 		return ErrShutdownAlreadyInitiated
 	}
 	servers.shutdownStatus.ShutdownInitiate()
+	ctx, cancel := context.WithTimeout(context.Background(), servers.shutdownTimeout)
+	defer cancel()
 	eg := &errgroup.Group{}
 	for _, server := range servers.servers {
 		s := server
@@ -100,6 +125,21 @@ func (servers *Servers) IsShutdownInitiated() bool {
 	return servers.shutdownStatus.IsShutdownInitiated()
 }
 
+func (servers *Servers) EnableShutdownOnTerminateSignal() *Servers {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt, os.Kill)
+		defer stop()
+		<-ctx.Done()
+		servers.GracefullyShutdown()
+		cancel()
+	}()
+
+	servers.shutdownCtx = ctx
+
+	return servers
+}
+
 type managedServer struct {
 	inner            Server
 	shutdownStatus   *ShutdownStatus
@@ -114,8 +154,13 @@ func (m *managedServer) Start(ctx context.Context) error {
 	resultChan := make(chan error)
 	go func() {
 		err := m.inner.Start(ctx)
-		m.occurredStartErr = err
-		resultChan <- err
+		if !errors.Is(err, http.ErrServerClosed) {
+			m.occurredStartErr = err
+			resultChan <- err
+		} else {
+			resultChan <- nil
+		}
+
 		close(resultChan)
 	}()
 	for {
