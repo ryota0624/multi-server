@@ -36,6 +36,7 @@ func (s *ShutdownStatus) IsShutdownInitiated() bool {
 
 type Servers struct {
 	servers         []*managedServer
+	constructs      []ConstructServer
 	shutdownStatus  *ShutdownStatus
 	shutdownTimeout time.Duration
 	shutdownCtx     context.Context
@@ -54,6 +55,8 @@ func (servers *Servers) ShutdownTimout(t time.Duration) *Servers {
 	return servers
 }
 
+type ConstructServer func() Server
+
 func (servers *Servers) Resister(server Server) *Servers {
 	servers.servers = append(servers.servers, &managedServer{
 		inner:            server,
@@ -61,6 +64,10 @@ func (servers *Servers) Resister(server Server) *Servers {
 		shutdownStatus:   &ShutdownStatus{},
 	})
 
+	return servers
+}
+func (servers *Servers) Lazy(constructServer ConstructServer) *Servers {
+	servers.constructs = append(servers.constructs, constructServer)
 	return servers
 }
 
@@ -71,8 +78,19 @@ func (servers *Servers) Start(ctx context.Context) error {
 	for _, server := range servers.servers {
 		s := server
 		eg.Go(func() error {
-			err := s.Start(ctx)
-			return err
+			return s.Start(ctx)
+		})
+	}
+
+	for _, cs := range servers.constructs {
+		server := cs()
+		servers.servers = append(servers.servers, &managedServer{
+			inner:            server,
+			occurredStartErr: nil,
+			shutdownStatus:   &ShutdownStatus{},
+		})
+		eg.Go(func() error {
+			return server.Start(ctx)
 		})
 	}
 
