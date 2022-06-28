@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -188,7 +187,6 @@ func (m *managedServer) GracefullyShutdown(ctx context.Context) error {
 	if m.shutdownStatus.IsShutdownInitiated() {
 		return ErrShutdownAlreadyInitiated
 	}
-	log.Println("GracefullyShutdown initiated")
 	return m.inner.GracefullyShutdown(ctx)
 }
 
