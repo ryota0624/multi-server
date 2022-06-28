@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type loopserver struct {
@@ -38,9 +40,7 @@ func Test_managedServer_Start_PropageteContextDone(t *testing.T) {
 	}()
 	err := m.Start(ctx)
 
-	if !errors.Is(err, ErrServerStopByContextDone) {
-		t.Fatalf("unexpected error raised: %v", err)
-	}
+	assert.ErrorIs(t, err, ErrServerStopByContextDone)
 }
 
 func Test_managedServer_Start_ReturnUnderServerStartErr(t *testing.T) {
@@ -57,9 +57,7 @@ func Test_managedServer_Start_ReturnUnderServerStartErr(t *testing.T) {
 
 	err := m.Start(context.Background())
 
-	if !errors.Is(err, anyErr) {
-		t.Fatalf("unexpected error raised: %v", err)
-	}
+	assert.ErrorIs(t, err, anyErr)
 }
 
 func TestServers_Start_ReturnErrWhenOneServerDown(t *testing.T) {
@@ -81,9 +79,7 @@ func TestServers_Start_ReturnErrWhenOneServerDown(t *testing.T) {
 
 	ctx := context.Background()
 	err := servers.Start(ctx)
-	if !errors.Is(err, anyErr) {
-		t.Fatalf("unexpected error raised: %v", err)
-	}
+	assert.ErrorIs(t, err, anyErr)
 }
 
 func TestServers_Register_Compile(t *testing.T) {
