@@ -60,6 +60,10 @@ func Test_managedServer_Start_ReturnUnderServerStartErr(t *testing.T) {
 	assert.ErrorIs(t, err, anyErr)
 }
 
+func Test_managedServer_GracefullyShutdown(t *testing.T) {
+
+}
+
 func TestServers_Start_ReturnErrWhenOneServerDown(t *testing.T) {
 	anyErr := errors.New("anyErr")
 
