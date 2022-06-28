@@ -85,6 +85,33 @@ func TestServers_Start_ReturnErrWhenOneServerDown(t *testing.T) {
 	err := servers.Start(ctx)
 	assert.ErrorIs(t, err, anyErr)
 }
+func TestServers_Start_ReturnErrWhenLazyServerDown(t *testing.T) {
+	anyErr := errors.New("anyErr")
+
+	servers := NewServers().
+		Resister(
+			&loopserver{
+				breakLoopAfter: time.Hour,
+				serverErr:      nil,
+			},
+		).
+		Resister(
+			&loopserver{
+				breakLoopAfter: time.Hour,
+				serverErr:      nil,
+			},
+		).
+		Lazy(func() Server {
+			return &loopserver{
+				breakLoopAfter: time.Second * 3,
+				serverErr:      anyErr,
+			}
+		})
+
+	ctx := context.Background()
+	err := servers.Start(ctx)
+	assert.ErrorIs(t, err, anyErr)
+}
 
 func TestServers_Register_Compile(t *testing.T) {
 	_ = NewServers().
