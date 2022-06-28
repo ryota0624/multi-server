@@ -2,6 +2,7 @@ package multiserver
 
 import (
 	"context"
+	"errors"
 	"net"
 
 	"google.golang.org/grpc"
@@ -15,7 +16,11 @@ type GrpcServer struct {
 var _ Server = (*HttpServer)(nil)
 
 func (s *GrpcServer) Start(_ context.Context) error {
-	return s.Serve(s.lis)
+	err := s.Serve(s.lis)
+	if errors.Is(err, grpc.ErrServerStopped) {
+		return nil
+	}
+	return err
 }
 func (s *GrpcServer) GracefullyShutdown(_ context.Context) error {
 	s.Stop()

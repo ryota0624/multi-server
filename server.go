@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"os/signal"
 	"sync/atomic"
@@ -171,13 +170,8 @@ func (m *managedServer) Start(ctx context.Context) error {
 	resultChan := make(chan error)
 	go func() {
 		err := m.inner.Start(ctx)
-		if !errors.Is(err, http.ErrServerClosed) {
-			m.occurredStartErr = err
-			resultChan <- err
-		} else {
-			resultChan <- nil
-		}
-
+		m.occurredStartErr = err
+		resultChan <- err
 		close(resultChan)
 	}()
 	for {

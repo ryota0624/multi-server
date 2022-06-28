@@ -2,6 +2,7 @@ package multiserver
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 )
@@ -14,7 +15,11 @@ type HttpServer struct {
 var _ Server = (*HttpServer)(nil)
 
 func (s *HttpServer) Start(_ context.Context) error {
-	return s.Serve(s.lis)
+	err := s.Serve(s.lis)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
 }
 func (s *HttpServer) GracefullyShutdown(ctx context.Context) error {
 	return s.Shutdown(ctx)
